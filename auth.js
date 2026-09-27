@@ -1,7 +1,8 @@
 // ניהול משתמשים – נשמר ב-localStorage של הדפדפן
 const Auth = (() => {
   const USERS_KEY = "spaceFlappy.users";
-  const SESSION_KEY = "spaceFlappy.session";
+  const SESSION_KEY = "spaceFlappy.session"; // הלשונית הנוכחית בלבד
+  const REMEMBER_KEY = "spaceFlappy.remember"; // "זכור אותי" – נשמר גם אחרי סגירת הדפדפן
 
   function loadUsers() {
     try {
@@ -63,28 +64,58 @@ const Auth = (() => {
     saveUsers(users);
   }
 
-  async function login(username, password) {
+  // נקרא/כותב לאחסון בלי לקרוס בחלון פרטי או כשהאחסון חסום
+  function storageGet(storage, k) {
+    try {
+      return storage.getItem(k);
+    } catch {
+      return null;
+    }
+  }
+
+  function storageSet(storage, k, value) {
+    try {
+      if (value == null) storage.removeItem(k);
+      else storage.setItem(k, value);
+    } catch {
+      // מתעלמים – הכניסה תעבוד רק ללשונית הנוכחית
+    }
+  }
+
+  // המשתמש המחובר: קודם הלשונית הנוכחית, אחר כך "זכור אותי"
+  function sessionKey() {
+    return storageGet(sessionStorage, SESSION_KEY) || storageGet(localStorage, REMEMBER_KEY);
+  }
+
+  async function login(username, password, remember = false) {
     const users = loadUsers();
     const user = users[key(username)];
     if (!user || (await hashPassword(user.salt, password)) !== user.hash) {
       throw new Error("שם משתמש או סיסמה שגויים");
     }
-    sessionStorage.setItem(SESSION_KEY, key(username));
+    storageSet(sessionStorage, SESSION_KEY, key(username));
+    storageSet(localStorage, REMEMBER_KEY, remember ? key(username) : null);
     return user.name;
   }
 
   function logout() {
-    sessionStorage.removeItem(SESSION_KEY);
+    storageSet(sessionStorage, SESSION_KEY, null);
+    storageSet(localStorage, REMEMBER_KEY, null);
   }
 
   function currentUser() {
-    const k = sessionStorage.getItem(SESSION_KEY);
-    const user = k && loadUsers()[k];
-    return user ? { name: user.name, best: user.best } : null;
+    const k = sessionKey();
+    if (!k) return null;
+    const user = loadUsers()[k];
+    if (!user) {
+      logout(); // המשתמש השמור כבר לא קיים
+      return null;
+    }
+    return { name: user.name, best: user.best };
   }
 
   function saveBest(score) {
-    const k = sessionStorage.getItem(SESSION_KEY);
+    const k = sessionKey();
     const users = loadUsers();
     if (!k || !users[k]) return 0;
     if (score > users[k].best) {
@@ -128,7 +159,7 @@ const Auth = (() => {
   $("login-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     try {
-      await Auth.login($("login-username").value, $("login-password").value);
+      await Auth.login($("login-username").value, $("login-password").value, $("login-remember").checked);
       $("login-password").value = "";
       showMessage("");
       window.dispatchEvent(new Event("auth-changed"));
