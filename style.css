@@ -66,8 +66,25 @@ input {
   color: #fff;
   font-size: 1rem;
 }
-.remember { flex-direction: row; align-items: center; gap: 8px; font-size: 0.9rem; cursor: pointer; }
-.remember input { padding: 0; width: 18px; height: 18px; accent-color: #7df9ff; cursor: pointer; }
+/* תיבת סימון ליד הטקסט (ולא מעליו כמו בשאר ה-label) */
+label.remember {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+label.remember input {
+  flex: none;
+  margin: 0;
+  padding: 0;
+  width: 18px;
+  height: 18px;
+  accent-color: #7df9ff;
+  cursor: pointer;
+}
 
 input:focus { outline: 2px solid #7df9ff; border-color: transparent; }
 
@@ -173,5 +190,6 @@ input:focus { outline: 2px solid #7df9ff; border-color: transparent; }
 }
 .debug-panel h3 { color: #ffb84d; font-size: 1rem; }
 .debug-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-.debug-check { flex-direction: row; align-items: center; gap: 6px; cursor: pointer; }
+label.debug-check { display: flex; flex-direction: row; align-items: center; gap: 6px; cursor: pointer; }
+label.debug-check input { flex: none; margin: 0; padding: 0; width: 16px; height: 16px; }
 .debug-status { font-size: 0.85rem; color: #ffe0b0; }
