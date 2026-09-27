@@ -1,0 +1,191 @@
+// ניהול משתמשים – נשמר ב-localStorage של הדפדפן
+const Auth = (() => {
+  const USERS_KEY = "spaceFlappy.users";
+  const SESSION_KEY = "spaceFlappy.session";
+
+  function loadUsers() {
+    try {
+      return JSON.parse(localStorage.getItem(USERS_KEY)) || {};
+    } catch {
+      return {};
+    }
+  }
+
+  function saveUsers(users) {
+    localStorage.setItem(USERS_KEY, JSON.stringify(users));
+  }
+
+  function randomSalt() {
+    const bytes = new Uint8Array(16);
+    crypto.getRandomValues(bytes);
+    return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+  }
+
+  async function hashPassword(salt, password) {
+    const text = salt + ":" + password;
+    if (window.crypto && crypto.subtle) {
+      const data = new TextEncoder().encode(text);
+      const digest = await crypto.subtle.digest("SHA-256", data);
+      return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
+    }
+    // גיבוי לדפדפנים ללא crypto.subtle (למשל חלק מדפי file://)
+    let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+    for (let i = 0; i < text.length; i++) {
+      const c = text.charCodeAt(i);
+      h1 = Math.imul(h1 ^ c, 2654435761);
+      h2 = Math.imul(h2 ^ c, 1597334677);
+    }
+    h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+    h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+    return "fb-" + (h2 >>> 0).toString(16) + (h1 >>> 0).toString(16);
+  }
+
+  const key = (username) => username.trim().toLowerCase();
+
+  async function register(username, password, confirm) {
+    username = username.trim();
+    if (username.length < 3 || username.length > 20) {
+      throw new Error("שם המשתמש חייב להכיל 3 עד 20 תווים");
+    }
+    if (password.length < 4) throw new Error("הסיסמה חייבת להכיל לפחות 4 תווים");
+    if (password !== confirm) throw new Error("הסיסמאות אינן תואמות");
+
+    const users = loadUsers();
+    if (users[key(username)]) throw new Error("שם המשתמש כבר תפוס");
+
+    const salt = randomSalt();
+    users[key(username)] = {
+      name: username,
+      salt,
+      hash: await hashPassword(salt, password),
+      best: 0,
+    };
+    saveUsers(users);
+  }
+
+  async function login(username, password) {
+    const users = loadUsers();
+    const user = users[key(username)];
+    if (!user || (await hashPassword(user.salt, password)) !== user.hash) {
+      throw new Error("שם משתמש או סיסמה שגויים");
+    }
+    sessionStorage.setItem(SESSION_KEY, key(username));
+    return user.name;
+  }
+
+  function logout() {
+    sessionStorage.removeItem(SESSION_KEY);
+  }
+
+  function currentUser() {
+    const k = sessionStorage.getItem(SESSION_KEY);
+    const user = k && loadUsers()[k];
+    return user ? { name: user.name, best: user.best } : null;
+  }
+
+  function saveBest(score) {
+    const k = sessionStorage.getItem(SESSION_KEY);
+    const users = loadUsers();
+    if (!k || !users[k]) return 0;
+    if (score > users[k].best) {
+      users[k].best = score;
+      saveUsers(users);
+    }
+    return users[k].best;
+  }
+
+  function leaderboard(limit = 10) {
+    return Object.values(loadUsers())
+      .filter((u) => u.best > 0)
+      .sort((a, b) => b.best - a.best)
+      .slice(0, limit)
+      .map((u) => ({ name: u.name, best: u.best }));
+  }
+
+  return { register, login, logout, currentUser, saveBest, leaderboard };
+})();
+
+// ---------- ממשק מסך הכניסה ----------
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const message = $("auth-message");
+
+  function showMessage(text, type) {
+    message.textContent = text;
+    message.className = "message " + (type || "");
+  }
+
+  document.querySelectorAll(".tab").forEach((tab) => {
+    tab.addEventListener("click", () => {
+      document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("active", t === tab));
+      document.querySelectorAll(".auth-form").forEach((f) => {
+        f.classList.toggle("active", f.id === tab.dataset.tab + "-form");
+      });
+      showMessage("");
+    });
+  });
+
+  $("login-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    try {
+      await Auth.login($("login-username").value, $("login-password").value);
+      $("login-password").value = "";
+      showMessage("");
+      window.dispatchEvent(new Event("auth-changed"));
+    } catch (err) {
+      showMessage(err.message, "error");
+    }
+  });
+
+  $("register-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const username = $("register-username").value;
+    try {
+      await Auth.register(username, $("register-password").value, $("register-confirm").value);
+      $("register-form").reset();
+      document.querySelector('.tab[data-tab="login"]').click();
+      $("login-username").value = username.trim();
+      showMessage("נרשמת בהצלחה! עכשיו אפשר להיכנס", "success");
+    } catch (err) {
+      showMessage(err.message, "error");
+    }
+  });
+
+  $("logout-btn").addEventListener("click", () => {
+    Auth.logout();
+    window.dispatchEvent(new Event("auth-changed"));
+  });
+
+  // רקע כוכבים מנצנצים
+  const canvas = $("stars");
+  const ctx = canvas.getContext("2d");
+  let stars = [];
+
+  function resize() {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    stars = Array.from({ length: Math.floor((canvas.width * canvas.height) / 4000) }, () => ({
+      x: Math.random() * canvas.width,
+      y: Math.random() * canvas.height,
+      r: Math.random() * 1.5 + 0.3,
+      phase: Math.random() * Math.PI * 2,
+    }));
+  }
+
+  function draw(t) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    for (const s of stars) {
+      ctx.globalAlpha = 0.5 + 0.5 * Math.sin(t / 700 + s.phase);
+      ctx.fillStyle = "#fff";
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    requestAnimationFrame(draw);
+  }
+
+  window.addEventListener("resize", resize);
+  resize();
+  requestAnimationFrame(draw);
+})();

@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>פלאפי בחלל</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <canvas id="stars"></canvas>
+
+  <!-- מסך כניסה / הרשמה -->
+  <section id="auth-screen" class="screen active">
+    <div class="card">
+      <h1 class="logo">🚀 פלאפי בחלל</h1>
+      <div class="tabs">
+        <button class="tab active" data-tab="login">כניסה</button>
+        <button class="tab" data-tab="register">הרשמה</button>
+      </div>
+
+      <form id="login-form" class="auth-form active" autocomplete="on">
+        <label>שם משתמש
+          <input type="text" id="login-username" autocomplete="username" required>
+        </label>
+        <label>סיסמה
+          <input type="password" id="login-password" autocomplete="current-password" required>
+        </label>
+        <button type="submit" class="btn primary">היכנס</button>
+      </form>
+
+      <form id="register-form" class="auth-form" autocomplete="off">
+        <label>שם משתמש
+          <input type="text" id="register-username" autocomplete="username" required minlength="3" maxlength="20">
+        </label>
+        <label>סיסמה
+          <input type="password" id="register-password" autocomplete="new-password" required minlength="4">
+        </label>
+        <label>אימות סיסמה
+          <input type="password" id="register-confirm" autocomplete="new-password" required minlength="4">
+        </label>
+        <button type="submit" class="btn primary">הירשם</button>
+      </form>
+
+      <p id="auth-message" class="message"></p>
+    </div>
+  </section>
+
+  <!-- מסך המשחק -->
+  <section id="game-screen" class="screen">
+    <header class="topbar">
+      <span>שלום, <strong id="current-user"></strong></span>
+      <span>שיא אישי: <strong id="best-score">0</strong></span>
+      <button id="logout-btn" class="btn small">התנתק</button>
+    </header>
+
+    <div class="game-wrap">
+      <canvas id="game" width="400" height="600"></canvas>
+
+      <div id="overlay" class="overlay">
+        <h2 id="overlay-title">מוכן להמראה?</h2>
+        <p id="overlay-text">לחץ רווח, קליק או גע במסך כדי לעוף</p>
+        <button id="start-btn" class="btn primary">התחל</button>
+      </div>
+    </div>
+
+    <aside class="leaderboard">
+      <h3>🏆 טבלת שיאים</h3>
+      <ol id="leaderboard-list"></ol>
+    </aside>
+  </section>
+
+  <script src="auth.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>
