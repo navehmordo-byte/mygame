@@ -12,6 +12,10 @@
   const fadeCtx = fadeCanvas.getContext("2d");
 
   // ---------- קבועים ----------
+  // מצב בדיקה: ?debug בכתובת, בלי תלות באותיות גדולות/קטנות
+  const DEBUG = [...new URLSearchParams(location.search).keys()].some((k) => k.toLowerCase() === "debug");
+  let invincible = false;
+
   const PILLAR_W = 64;
   const SPACING = 220;
   const POINTS_PER_LEVEL = 10;
@@ -377,15 +381,16 @@
     }
 
     const previousBest = Auth.currentUser()?.best || 0;
-    const best = Auth.saveBest(score);
+    // במצב בדיקה אפשר לקפוץ לכל ניקוד – לכן לא שומרים שיא
+    const best = DEBUG ? previousBest : Auth.saveBest(score);
     refreshStats();
 
     $("overlay-title").textContent = "💥 התרסקת!";
     $("overlay-text").textContent =
       `ניקוד: ${score} | שלב: ${levelLabel(level())} | שיא: ${best}` +
-      (score > previousBest ? " – שיא חדש! 🎉" : "");
+      (DEBUG ? " (מצב בדיקה – השיא לא נשמר)" : score > previousBest ? " – שיא חדש! 🎉" : "");
     $("start-btn").textContent = "שחק שוב";
-    setTimeout(() => $("overlay").classList.remove("hidden"), 600);
+    setTimeout(() => state === "over" && $("overlay").classList.remove("hidden"), 600);
   }
 
   function hitsPillar(p) {
@@ -444,7 +449,13 @@
     const last = pillars[pillars.length - 1];
     if (!last || last.x < W - SPACING) addPillar(W + 10);
 
-    if (bird.y - bird.r < 0 || bird.y + bird.r > H || pillars.some(hitsPillar)) {
+    if (invincible) {
+      // מצב בלתי פגיע: הציפור נשארת בתוך המסך ועוברת דרך מכשולים
+      if (bird.y < bird.r || bird.y > H - bird.r) {
+        bird.y = Math.max(bird.r, Math.min(H - bird.r, bird.y));
+        bird.vy = 0;
+      }
+    } else if (bird.y - bird.r < 0 || bird.y + bird.r > H || pillars.some(hitsPillar)) {
       gameOver();
     }
   }
@@ -800,16 +811,77 @@
   window.addEventListener("auth-changed", showScreen);
 
   // כלי בדיקה – פעיל רק עם ?debug בכתובת
-  if (new URLSearchParams(location.search).has("debug")) {
-    window.__spaceFlappyDebug = {
+  if (DEBUG) {
+    const debug = {
       setScore(n) {
         if (state !== "playing") start();
         score = n;
-        changeLevel(Math.floor(n / POINTS_PER_LEVEL) % LEVELS.length);
+        const target = Math.floor(n / POINTS_PER_LEVEL) % LEVELS.length;
+        // באנר רק כשמגיעים לתחילת שלב (כפתור שלב או מעבר של 10 נקודות)
+        if (target !== levelIndex || n % POINTS_PER_LEVEL === 0) changeLevel(target);
         fade = 1;
       },
-      info: () => ({ state, score, level: level().name, speed: currentSpeed(), y: bird.y, vy: bird.vy }),
+      addPoint() {
+        debug.setScore(state === "playing" ? score + 1 : 1);
+      },
+      setInvincible(on) {
+        invincible = !!on;
+      },
+      info: () => ({
+        state, score, level: level().name, speed: currentSpeed(), y: bird.y, vy: bird.vy, invincible,
+      }),
     };
+    window.__spaceFlappyDebug = debug;
+
+    // פאנל בדיקה גלוי מתחת למשחק
+    const panel = document.createElement("aside");
+    panel.className = "debug-panel";
+    const title = document.createElement("h3");
+    title.textContent = "🛠 מצב בדיקה";
+    panel.appendChild(title);
+
+    const makeButton = (text, onClick) => {
+      const btn = document.createElement("button");
+      btn.className = "btn small";
+      btn.textContent = text;
+      btn.addEventListener("click", (e) => {
+        e.currentTarget.blur();
+        initAudio();
+        onClick();
+      });
+      return btn;
+    };
+
+    const levelRow = document.createElement("div");
+    levelRow.className = "debug-row";
+    LEVELS.forEach((lvl, i) => {
+      levelRow.appendChild(makeButton(levelLabel(lvl), () => debug.setScore(i * POINTS_PER_LEVEL)));
+    });
+    panel.appendChild(levelRow);
+
+    const toolsRow = document.createElement("div");
+    toolsRow.className = "debug-row";
+    toolsRow.appendChild(makeButton("+1 נקודה", debug.addPoint));
+    const shield = document.createElement("label");
+    shield.className = "debug-check";
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.id = "debug-invincible";
+    checkbox.addEventListener("change", () => debug.setInvincible(checkbox.checked));
+    shield.append(checkbox, " 🛡 בלתי פגיע");
+    toolsRow.appendChild(shield);
+    panel.appendChild(toolsRow);
+
+    const status = document.createElement("p");
+    status.className = "debug-status";
+    panel.appendChild(status);
+    setInterval(() => {
+      const lvl = level();
+      status.textContent =
+        `שלב: ${levelLabel(lvl)} | ניקוד: ${score} | מהירות: ${Math.round(currentSpeed())} | כבידה: ${lvl.gravity}`;
+    }, 200);
+
+    document.querySelector(".game-wrap").after(panel);
   }
 
   reset();

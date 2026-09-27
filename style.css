@@ -155,3 +155,20 @@ input:focus { outline: 2px solid #7df9ff; border-color: transparent; }
 .leaderboard li { padding: 3px 0; }
 .leaderboard li.me { color: #7df9ff; font-weight: bold; }
 .leaderboard .empty { color: #a9a3d9; list-style: none; }
+
+/* ---------- פאנל מצב בדיקה (?debug) ---------- */
+.debug-panel {
+  width: 100%;
+  max-width: 400px;
+  background: rgba(40, 28, 10, 0.85);
+  border: 2px dashed #ffb84d;
+  border-radius: 12px;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.debug-panel h3 { color: #ffb84d; font-size: 1rem; }
+.debug-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.debug-check { flex-direction: row; align-items: center; gap: 6px; cursor: pointer; }
+.debug-status { font-size: 0.85rem; color: #ffe0b0; }
