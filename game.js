@@ -868,7 +868,9 @@
     checkbox.type = "checkbox";
     checkbox.id = "debug-invincible";
     checkbox.addEventListener("change", () => debug.setInvincible(checkbox.checked));
-    shield.append(checkbox, " 🛡 בלתי פגיע");
+    const shieldText = document.createElement("span");
+    shieldText.textContent = "🛡 בלתי פגיע";
+    shield.append(checkbox, shieldText);
     toolsRow.appendChild(shield);
     panel.appendChild(toolsRow);
 
