@@ -1,4 +1,7 @@
-// טבלת שיאים משותפת לכל השחקנים – נשמרת בשירות הציבורי jsonblob.com (בלי חשבון)
+// טבלת שיאים שבועית משותפת לכל השחקנים – נשמרת בשירות הציבורי jsonblob.com (בלי חשבון)
+//
+// הטבלה מתאפסת כל יום ראשון בחצות (שעון ישראל). השירות מוחק טבלאות שלא נעשה בהן שימוש
+// ואי אפשר להבטיח טבלה קבועה – לכן היא מלכתחילה שבועית.
 //
 // רק שם + ניקוד נשלחים לשירות. משתמשים וסיסמאות נשארים בדפדפן בלבד.
 // שימו לב: כל מי שמבין בקוד יכול לשנות את הטבלה, והשירות עלול למחוק טבלה שלא נעשה בה שימוש זמן רב.
@@ -13,7 +16,35 @@ const SharedBoard = (() => {
   const MAX_ROWS = 300;
   const MAX_SCORE = 100000;
 
+  const TZ = "Asia/Jerusalem";
+  const WEEK_RE = /^\d{4}-\d{2}-\d{2}$/;
+
   const enabled = () => SHARED_BOARD_ID.trim() !== "";
+
+  // התאריך והיום בשבוע לפי שעון ישראל – זהה לכל השחקנים בכל אזור זמן
+  function israelToday(now = new Date()) {
+    const parts = Object.fromEntries(
+      new Intl.DateTimeFormat("en-US", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit", weekday: "short" })
+        .formatToParts(now)
+        .map((p) => [p.type, p.value])
+    );
+    const weekday = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(parts.weekday);
+    return { y: +parts.year, m: +parts.month, d: +parts.day, weekday };
+  }
+
+  // מפתח השבוע = תאריך יום ראשון שפתח אותו, למשל "2026-09-27"
+  function currentWeek(now = new Date()) {
+    const t = israelToday(now);
+    const sunday = new Date(Date.UTC(t.y, t.m - 1, t.d - t.weekday));
+    return sunday.toISOString().slice(0, 10);
+  }
+
+  // כמה ימים (לפי לוח שנה) עד האיפוס הבא – 1 = הלילה בחצות
+  function daysUntilReset(now = new Date()) {
+    return 7 - israelToday(now).weekday;
+  }
+
+  class BoardMissingError extends Error {}
 
   async function request(url, options = {}) {
     const controller = new AbortController();
@@ -24,6 +55,7 @@ const SharedBoard = (() => {
         headers: { "Content-Type": "application/json", Accept: "application/json", ...options.headers },
         signal: controller.signal,
       });
+      if (res.status === 404) throw new BoardMissingError("הטבלה לא קיימת");
       if (!res.ok) throw new Error("HTTP " + res.status);
       return res;
     } finally {
@@ -43,7 +75,10 @@ const SharedBoard = (() => {
       if (!Number.isInteger(best) || best < 0 || best > MAX_SCORE) continue;
       scores[id] = { name, best, at: Number.isFinite(row.at) ? row.at : 0 };
     }
-    return { v: 1, scores };
+    const week = raw && typeof raw.week === "string" && WEEK_RE.test(raw.week) ? raw.week : "";
+    // טבלה משבוע קודם נחשבת ריקה
+    if (week !== currentWeek()) return { v: 1, week: currentWeek(), scores: {} };
+    return { v: 1, week, scores };
   }
 
   function sortedRows(data) {
@@ -67,6 +102,7 @@ const SharedBoard = (() => {
   }
 
   // קריאה → מיזוג (הגבוה מנצח) → כתיבה → אימות. ניסיון נוסף אם כתיבה של מישהו אחר דרסה אותנו.
+  // אם הטבלה משבוע קודם – load() כבר מחזיר אותה ריקה, כך שהכתיבה הראשונה בשבוע מאפסת אותה לכולם.
   async function submit(playerId, name, best) {
     if (!enabled() || !Number.isInteger(best) || best <= 0) return;
     for (let attempt = 0; attempt < 2; attempt++) {
@@ -78,6 +114,7 @@ const SharedBoard = (() => {
       // שומרים על גודל סביר: רק MAX_ROWS הגבוהים
       const keep = sortedRows(data).slice(0, MAX_ROWS);
       data.scores = Object.fromEntries(keep.map((r) => [r.id, { name: r.name, best: r.best, at: r.at }]));
+      data.week = currentWeek();
 
       await request(`${API}/${encodeURIComponent(SHARED_BOARD_ID)}`, {
         method: "PUT",
@@ -89,11 +126,11 @@ const SharedBoard = (() => {
   }
 
   async function createBoard() {
-    const res = await request(API, { method: "POST", body: JSON.stringify({ v: 1, scores: {} }) });
+    const res = await request(API, { method: "POST", body: JSON.stringify({ v: 1, week: currentWeek(), scores: {} }) });
     const id = res.headers.get("x-jsonblob-id") || (res.headers.get("Location") || "").split("/").pop();
     if (!id) throw new Error("השירות לא החזיר מזהה");
     return id;
   }
 
-  return { enabled, fetchBoard, bestOf, submit, createBoard };
+  return { enabled, fetchBoard, bestOf, submit, createBoard, currentWeek, daysUntilReset, BoardMissingError };
 })();

@@ -381,10 +381,11 @@
     }
 
     const previousBest = Auth.currentUser()?.best || 0;
+    const previousWeekBest = Auth.currentUser()?.weekBest || 0;
     // במצב בדיקה אפשר לקפוץ לכל ניקוד – לכן לא שומרים שיא
     const best = DEBUG ? previousBest : Auth.saveBest(score);
     refreshStats();
-    if (!DEBUG && score > previousBest) syncShared();
+    if (!DEBUG && score > previousWeekBest) syncShared();
 
     $("overlay-title").textContent = "💥 התרסקת!";
     $("overlay-text").textContent =
@@ -737,12 +738,23 @@
   const BOARD_MODES = {
     shared: "🌐 משותפת",
     offline: "⚠️ לא מחובר – טבלה מקומית",
+    missing: "⚠️ הטבלה המשותפת נמחקה – צריך ליצור חדשה",
     local: "💻 טבלה מקומית",
     loading: "⏳ טוען…",
   };
+
+  function resetText() {
+    const days = SharedBoard.daysUntilReset();
+    if (days === 1) return "מתאפסת הלילה בחצות";
+    if (days === 2) return "מתאפסת מחר בלילה בחצות";
+    return `מתאפסת ביום ראשון בחצות (בעוד ${days} ימים)`;
+  }
   let boardRequest = 0;
 
   function renderBoard(rows, mode, isMe) {
+    const weekly = mode === "shared";
+    $("board-title").textContent = weekly ? "🏆 טבלת השבוע" : "🏆 טבלת שיאים";
+    $("board-reset").textContent = weekly ? resetText() : "";
     $("board-mode").textContent = BOARD_MODES[mode];
     $("board-mode").dataset.mode = mode;
     const list = $("leaderboard-list");
@@ -750,7 +762,7 @@
     if (!rows.length) {
       const li = document.createElement("li");
       li.className = "empty";
-      li.textContent = "עדיין אין שיאים – תהיה הראשון!";
+      li.textContent = weekly ? "טבלה חדשה השבוע – תהיה הראשון!" : "עדיין אין שיאים – תהיה הראשון!";
       list.appendChild(li);
     }
     for (const row of rows) {
@@ -780,17 +792,18 @@
     try {
       const rows = await SharedBoard.fetchBoard();
       if (req === boardRequest) renderBoard(rows, "shared", (row) => row.id === user.playerId);
-    } catch {
-      if (req === boardRequest) renderBoard(localRows, "offline", isLocalMe);
+    } catch (err) {
+      const mode = err instanceof SharedBoard.BoardMissingError ? "missing" : "offline";
+      if (req === boardRequest) renderBoard(localRows, mode, isLocalMe);
     }
   }
 
-  // שולח לטבלה המשותפת את השיא המקומי (גם שיא שהושג בזמן שלא היה חיבור)
+  // שולח לטבלה השבועית את השיא של השבוע (גם שיא שהושג השבוע בזמן שלא היה חיבור)
   async function syncShared() {
     const user = Auth.currentUser();
-    if (DEBUG || !user || !SharedBoard.enabled() || user.best <= 0) return;
+    if (DEBUG || !user || !SharedBoard.enabled() || user.weekBest <= 0) return;
     try {
-      await SharedBoard.submit(user.playerId, user.name, user.best);
+      await SharedBoard.submit(user.playerId, user.name, user.weekBest);
     } catch {
       // לא מחובר – ננסה שוב בטעינה הבאה או אחרי המשחק הבא
     }
