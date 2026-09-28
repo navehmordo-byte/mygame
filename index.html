@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>פלאפי בחלל</title>
   <!-- ?v= מונע מהדפדפן להשתמש בקבצים ישנים מהמטמון – להעלות את המספר בכל עדכון -->
-  <link rel="stylesheet" href="style.css?v=2">
+  <link rel="stylesheet" href="style.css?v=3">
 </head>
 <body>
   <canvas id="stars"></canvas>
@@ -69,12 +69,13 @@
     </div>
 
     <aside class="leaderboard">
-      <h3>🏆 טבלת שיאים</h3>
+      <h3>🏆 טבלת שיאים <span id="board-mode" class="board-mode"></span></h3>
       <ol id="leaderboard-list"></ol>
     </aside>
   </section>
 
-  <script src="auth.js?v=2"></script>
-  <script src="game.js?v=2"></script>
+  <script src="auth.js?v=3"></script>
+  <script src="shared-board.js?v=3"></script>
+  <script src="game.js?v=3"></script>
 </body>
 </html>
