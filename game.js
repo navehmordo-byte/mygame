@@ -384,6 +384,7 @@
     // במצב בדיקה אפשר לקפוץ לכל ניקוד – לכן לא שומרים שיא
     const best = DEBUG ? previousBest : Auth.saveBest(score);
     refreshStats();
+    if (!DEBUG && score > previousBest) syncShared();
 
     $("overlay-title").textContent = "💥 התרסקת!";
     $("overlay-text").textContent =
@@ -732,15 +733,20 @@
   }
 
   // ---------- ממשק ----------
-  function refreshStats() {
-    const user = Auth.currentUser();
-    if (!user) return;
-    $("current-user").textContent = user.name;
-    $("best-score").textContent = user.best;
+  // ---------- טבלת שיאים (משותפת אם אפשר, אחרת מקומית) ----------
+  const BOARD_MODES = {
+    shared: "🌐 משותפת",
+    offline: "⚠️ לא מחובר – טבלה מקומית",
+    local: "💻 טבלה מקומית",
+    loading: "⏳ טוען…",
+  };
+  let boardRequest = 0;
 
+  function renderBoard(rows, mode, isMe) {
+    $("board-mode").textContent = BOARD_MODES[mode];
+    $("board-mode").dataset.mode = mode;
     const list = $("leaderboard-list");
     list.innerHTML = "";
-    const rows = Auth.leaderboard();
     if (!rows.length) {
       const li = document.createElement("li");
       li.className = "empty";
@@ -750,10 +756,50 @@
     for (const row of rows) {
       const li = document.createElement("li");
       li.textContent = `${row.name} – ${row.best}`;
-      if (row.name === user.name) li.classList.add("me");
+      if (isMe(row)) li.classList.add("me");
       list.appendChild(li);
     }
   }
+
+  async function refreshStats() {
+    const user = Auth.currentUser();
+    if (!user) return;
+    $("current-user").textContent = user.name;
+    $("best-score").textContent = user.best;
+
+    const localRows = Auth.leaderboard();
+    const isLocalMe = (row) => row.name === user.name;
+    if (!SharedBoard.enabled()) {
+      renderBoard(localRows, "local", isLocalMe);
+      return;
+    }
+
+    // מציגים מיד את הטבלה המקומית, ומחליפים כשהמשותפת מגיעה
+    const req = ++boardRequest;
+    if (!$("leaderboard-list").children.length) renderBoard(localRows, "loading", isLocalMe);
+    try {
+      const rows = await SharedBoard.fetchBoard();
+      if (req === boardRequest) renderBoard(rows, "shared", (row) => row.id === user.playerId);
+    } catch {
+      if (req === boardRequest) renderBoard(localRows, "offline", isLocalMe);
+    }
+  }
+
+  // שולח לטבלה המשותפת את השיא המקומי (גם שיא שהושג בזמן שלא היה חיבור)
+  async function syncShared() {
+    const user = Auth.currentUser();
+    if (DEBUG || !user || !SharedBoard.enabled() || user.best <= 0) return;
+    try {
+      await SharedBoard.submit(user.playerId, user.name, user.best);
+    } catch {
+      // לא מחובר – ננסה שוב בטעינה הבאה או אחרי המשחק הבא
+    }
+    refreshStats();
+  }
+
+  setInterval(() => {
+    if (gameVisible() && state !== "playing" && document.visibilityState === "visible") refreshStats();
+  }, 30000);
 
   function showReady() {
     reset();
@@ -771,7 +817,9 @@
     $("auth-screen").classList.toggle("active", !loggedIn);
     $("game-screen").classList.toggle("active", loggedIn);
     if (loggedIn) {
+      $("leaderboard-list").innerHTML = "";
       refreshStats();
+      syncShared();
       showReady();
     }
   }
@@ -873,6 +921,24 @@
     shield.append(checkbox, shieldText);
     toolsRow.appendChild(shield);
     panel.appendChild(toolsRow);
+
+    const boardRow = document.createElement("div");
+    boardRow.className = "debug-row";
+    const boardOut = document.createElement("p");
+    boardOut.className = "debug-status";
+    boardRow.appendChild(
+      makeButton("🌐 צור טבלה משותפת חדשה", async () => {
+        boardOut.textContent = "יוצר…";
+        try {
+          const id = await SharedBoard.createBoard();
+          boardOut.textContent =
+            `נוצרה טבלה! המזהה: ${id} – הדביקו אותו ב-SHARED_BOARD_ID בקובץ shared-board.js (או שלחו לי ואכניס).`;
+        } catch (err) {
+          boardOut.textContent = "לא הצלחתי ליצור טבלה: " + err.message;
+        }
+      })
+    );
+    panel.append(boardRow, boardOut);
 
     const status = document.createElement("p");
     status.className = "debug-status";

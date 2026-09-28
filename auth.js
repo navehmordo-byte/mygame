@@ -106,12 +106,22 @@ const Auth = (() => {
   function currentUser() {
     const k = sessionKey();
     if (!k) return null;
-    const user = loadUsers()[k];
+    const users = loadUsers();
+    const user = users[k];
     if (!user) {
       logout(); // המשתמש השמור כבר לא קיים
       return null;
     }
-    return { name: user.name, best: user.best };
+    // מזהה שחקן קבוע לטבלה המשותפת – כך שני "דני" ממכשירים שונים לא דורסים זה את זה
+    if (!/^[0-9a-f]{16}$/.test(user.playerId || "")) {
+      user.playerId = randomSalt().slice(0, 16);
+      try {
+        saveUsers(users);
+      } catch {
+        // אחסון חסום – המזהה יתקיים רק לטעינה הזו
+      }
+    }
+    return { name: user.name, best: user.best, playerId: user.playerId };
   }
 
   function saveBest(score) {
