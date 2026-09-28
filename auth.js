@@ -121,18 +121,40 @@ const Auth = (() => {
         // אחסון חסום – המזהה יתקיים רק לטעינה הזו
       }
     }
-    return { name: user.name, best: user.best, playerId: user.playerId };
+    return {
+      name: user.name,
+      best: user.best,
+      playerId: user.playerId,
+      weekBest: user.week === thisWeek() ? user.weekBest || 0 : 0,
+    };
   }
 
+  // השבוע הנוכחי של הטבלה השבועית (מוגדר ב-shared-board.js, שנטען אחרי הקובץ הזה)
+  const thisWeek = () => (typeof SharedBoard !== "undefined" ? SharedBoard.currentWeek() : "");
+
+  // שומר גם את השיא של כל הזמנים וגם את השיא של השבוע (לטבלה השבועית)
   function saveBest(score) {
     const k = sessionKey();
     const users = loadUsers();
-    if (!k || !users[k]) return 0;
-    if (score > users[k].best) {
-      users[k].best = score;
-      saveUsers(users);
+    const user = k && users[k];
+    if (!user) return 0;
+    let changed = false;
+    if (score > user.best) {
+      user.best = score;
+      changed = true;
     }
-    return users[k].best;
+    const week = thisWeek();
+    if (user.week !== week) {
+      user.week = week;
+      user.weekBest = 0;
+      changed = true;
+    }
+    if (score > user.weekBest) {
+      user.weekBest = score;
+      changed = true;
+    }
+    if (changed) saveUsers(users);
+    return user.best;
   }
 
   function leaderboard(limit = 10) {

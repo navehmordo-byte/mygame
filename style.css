@@ -173,7 +173,10 @@ input:focus { outline: 2px solid #7df9ff; border-color: transparent; }
 .leaderboard h3 { margin-bottom: 8px; display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
 .board-mode { font-size: 0.75rem; font-weight: normal; color: #a9a3d9; }
 .board-mode[data-mode="shared"] { color: #7dffb0; }
-.board-mode[data-mode="offline"] { color: #ffb84d; }
+.board-mode[data-mode="offline"],
+.board-mode[data-mode="missing"] { color: #ffb84d; }
+.board-reset { font-size: 0.8rem; color: #a9a3d9; margin: -4px 0 6px; }
+.board-reset:empty { display: none; }
 .leaderboard ol { padding-inline-start: 22px; }
 .leaderboard li { padding: 3px 0; }
 .leaderboard li.me { color: #7df9ff; font-weight: bold; }
